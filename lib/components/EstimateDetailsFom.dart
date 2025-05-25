@@ -2,7 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 class EstimateDetailsForm extends StatefulWidget {
-  const EstimateDetailsForm({super.key});
+  final Function(Map<String, dynamic>) onFormChanged;
+
+  const EstimateDetailsForm({
+    super.key,
+    required this.onFormChanged,
+  });
 
   @override
   State<EstimateDetailsForm> createState() => _EstimateDetailsFormState();
@@ -15,7 +20,6 @@ class _EstimateDetailsFormState extends State<EstimateDetailsForm> {
   final TextEditingController timeController = TextEditingController();
   final TextEditingController descriptionController = TextEditingController();
 
-  // Track current focus to manage field styling
   final FocusNode amountFocus = FocusNode();
   final FocusNode advancedPaidFocus = FocusNode();
   final FocusNode descriptionFocus = FocusNode();
@@ -28,6 +32,7 @@ class _EstimateDetailsFormState extends State<EstimateDetailsForm> {
   void initState() {
     super.initState();
     _setupFocusListeners();
+    _setupTextListeners();
     
     // Initialize with current date and time
     dateController.text = DateFormat('yyyy-MM-dd').format(DateTime.now());
@@ -52,6 +57,31 @@ class _EstimateDetailsFormState extends State<EstimateDetailsForm> {
         _isDescriptionFocused = descriptionFocus.hasFocus;
       });
     });
+  }
+
+  void _setupTextListeners() {
+    amountController.addListener(_notifyParent);
+    advancedPaidController.addListener(_notifyParent);
+    dateController.addListener(_notifyParent);
+    timeController.addListener(_notifyParent);
+    descriptionController.addListener(_notifyParent);
+  }
+
+  void _notifyParent() {
+    widget.onFormChanged({
+      'amount': amountController.text,
+      'advancedPaid': advancedPaidController.text,
+      'date': dateController.text,
+      'time': timeController.text,
+      'description': descriptionController.text,
+      'balance': _calculateBalance().toString(),
+    });
+  }
+
+  int _calculateBalance() {
+    final amount = int.tryParse(amountController.text) ?? 0;
+    final advanced = int.tryParse(advancedPaidController.text) ?? 0;
+    return amount - advanced;
   }
 
   @override
@@ -227,11 +257,6 @@ class _EstimateDetailsFormState extends State<EstimateDetailsForm> {
   }
 
   Widget _buildBalanceCard() {
-    // Calculate balance
-    final amount = double.tryParse(amountController.text) ?? 0;
-    final advanced = double.tryParse(advancedPaidController.text) ?? 0;
-    final balance = amount - advanced;
-    
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 16),
       padding: const EdgeInsets.all(20),
@@ -274,7 +299,7 @@ class _EstimateDetailsFormState extends State<EstimateDetailsForm> {
                 ),
               ),
               Text(
-                '\$${balance.toStringAsFixed(2)}',
+                '${_calculateBalance()}',
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 20,
@@ -375,30 +400,6 @@ class _EstimateDetailsFormState extends State<EstimateDetailsForm> {
             descriptionController,
             focusNode: descriptionFocus,
             isFocused: _isDescriptionFocused,
-          ),
-          const SizedBox(height: 24),
-          ElevatedButton(
-            onPressed: () {
-              // Save estimate logic here
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF4CAF50),
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              minimumSize: const Size(double.infinity, 0),
-              elevation: 0,
-            ),
-            child: const Text(
-              'SAVE ESTIMATE',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1,
-              ),
-            ),
           ),
         ],
       ),

@@ -1,91 +1,329 @@
+import 'package:ed_repair/services/customer_service.dart';
 import 'package:flutter/material.dart';
+import 'package:appwrite/models.dart';
 
-// Model class for Customer
 class Customer {
   final String id;
   final String name;
-  final String email;
+  final String phone;
+  final String address;
 
-  Customer({required this.id, required this.name, required this.email});
+  Customer({
+    required this.id, 
+    required this.name, 
+    required this.phone, 
+    required this.address
+  });
+
+  factory Customer.fromDocument(Document doc) {
+    return Customer(
+      id: doc.$id,
+      name: doc.data['name'] ?? '',
+      phone: doc.data['phone'] ?? '',
+      address: doc.data['address'] ?? '',
+    );
+  }
+
+  // Create a copy with updated fields
+  Customer copyWith({
+    String? id,
+    String? name,
+    String? phone,
+    String? address,
+  }) {
+    return Customer(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      phone: phone ?? this.phone,
+      address: address ?? this.address,
+    );
+  }
+
+  // Convert to map with basic info only
+  Map<String, String> toBasicInfo() {
+    return {
+      'name': name,
+      'phone': phone,
+      'address': address,
+    };
+  }
 }
 
 class SelectCustomerBox extends StatefulWidget {
-  final Function(Customer)? onCustomerSelected;
+  final Function(Map<String, String>?) onCustomerChanged; // Now passes basic info map or null
+  final Customer? initialCustomer;
 
-  const SelectCustomerBox({super.key, this.onCustomerSelected});
+  const SelectCustomerBox({
+    super.key, 
+    required this.onCustomerChanged,
+    this.initialCustomer,
+  });
 
   @override
   State<SelectCustomerBox> createState() => _SelectCustomerBoxState();
 }
 
 class _SelectCustomerBoxState extends State<SelectCustomerBox> {
-  // Sample customer data - replace with your actual data source
-  final List<Customer> _allCustomers = [
-    Customer(id: '1', name: 'John Doe', email: 'john@example.com'),
-    Customer(id: '2', name: 'Jane Smith', email: 'jane@example.com'),
-    Customer(id: '3', name: 'Robert Johnson', email: 'robert@example.com'),
-    Customer(id: '4', name: 'Emily Davis', email: 'emily@example.com'),
-    Customer(id: '5', name: 'Michael Wilson', email: 'michael@example.com'),
-  ];
-
+  final CustomerService _customerService = CustomerService();
+  List<Customer> _allCustomers = [];
   Customer? _selectedCustomer;
+  bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedCustomer = widget.initialCustomer;
+    _loadCustomers();
+  }
+
+  Future<void> _loadCustomers() async {
+    setState(() {
+      _isLoading = true;
+    });
+    
+    try {
+      final documents = await _customerService.getAllCustomers();
+      setState(() {
+        _allCustomers = documents.map((doc) => Customer.fromDocument(doc)).toList();
+        _isLoading = false;
+        
+        // If initial customer was provided, ensure it's in our list
+        if (widget.initialCustomer != null) {
+          final exists = _allCustomers.any((c) => c.id == widget.initialCustomer!.id);
+          if (!exists) {
+            _allCustomers.add(widget.initialCustomer!);
+          }
+        }
+      });
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading customers: $e')),
+        );
+      }
+    }
+  }
 
   void _showCustomerSelectionDialog() {
     showDialog(
       context: context,
       builder: (context) => CustomerSelectionDialog(
         customers: _allCustomers,
+        customerService: _customerService,
+        selectedCustomer: _selectedCustomer,
         onSelectCustomer: (customer) {
           setState(() {
             _selectedCustomer = customer;
           });
-          if (widget.onCustomerSelected != null) {
-            widget.onCustomerSelected!(customer);
-          }
+          // Pass only basic customer info (name, phone, address) to parent
+          widget.onCustomerChanged(customer.toBasicInfo());
         },
+        onRefresh: _loadCustomers,
       ),
     );
+  }
+
+  void _clearSelection() {
+    setState(() {
+      _selectedCustomer = null;
+    });
+    // Pass null to parent to clear selection
+    widget.onCustomerChanged(null);
   }
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: const Color(0xFF232524), // dark background
+      color: const Color.fromARGB(255, 247, 247, 247),
       child: Center(
-        child: InkWell(
-          onTap: _showCustomerSelectionDialog,
-          borderRadius: BorderRadius.circular(10.0),
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 14.0, horizontal: 24.0),
-            decoration: BoxDecoration(
-              color: Colors.white,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Customer Info Card (shown when customer is selected)
+            if (_selectedCustomer != null) ...[
+              Container(
+                margin: const EdgeInsets.only(bottom: 16.0),
+                padding: const EdgeInsets.all(16.0),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12.0),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const CircleAvatar(
+                          backgroundColor: Color(0xFF2196F3),
+                          radius: 20,
+                          child: Icon(
+                            Icons.person,
+                            color: Colors.white,
+                            size: 20,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _selectedCustomer!.name,
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.black87,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'Selected Customer',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey.shade600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: _clearSelection,
+                          icon: Icon(
+                            Icons.close,
+                            color: Colors.grey.shade600,
+                            size: 20,
+                          ),
+                          tooltip: 'Clear selection',
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(
+                            minWidth: 32,
+                            minHeight: 32,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(12.0),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade50,
+                        borderRadius: BorderRadius.circular(8.0),
+                      ),
+                      child: Column(
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.phone,
+                                size: 16,
+                                color: Colors.grey.shade600,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  _selectedCustomer!.phone.isEmpty 
+                                      ? 'No phone number' 
+                                      : _selectedCustomer!.phone,
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: _selectedCustomer!.phone.isEmpty 
+                                        ? Colors.grey.shade500 
+                                        : Colors.black87,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(
+                                Icons.location_on,
+                                size: 16,
+                                color: Colors.grey.shade600,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  _selectedCustomer!.address.isEmpty 
+                                      ? 'No address provided' 
+                                      : _selectedCustomer!.address,
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: _selectedCustomer!.address.isEmpty 
+                                        ? Colors.grey.shade500 
+                                        : Colors.black87,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            
+            // Selection Button
+            InkWell(
+              onTap: _isLoading ? null : _showCustomerSelectionDialog,
               borderRadius: BorderRadius.circular(10.0),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 14.0, horizontal: 24.0),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(10.0),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.person_outline, size: 20),
-                const SizedBox(width: 8),
-                Text(
-                  _selectedCustomer?.name ?? 'Select Customer',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
-                    fontSize: 14,
-                  ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _isLoading
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.person_outline, size: 20),
+                    const SizedBox(width: 8),
+                    Text(
+                      _isLoading 
+                          ? 'Loading...' 
+                          : (_selectedCustomer != null 
+                              ? 'Change Customer' 
+                              : 'Select Customer'),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    if (!_isLoading) const Icon(Icons.arrow_drop_down, size: 20),
+                  ],
                 ),
-                const SizedBox(width: 8),
-                const Icon(Icons.arrow_drop_down, size: 20),
-              ],
+              ),
             ),
-          ),
+          ],
         ),
       ),
     );
@@ -94,12 +332,18 @@ class _SelectCustomerBoxState extends State<SelectCustomerBox> {
 
 class CustomerSelectionDialog extends StatefulWidget {
   final List<Customer> customers;
+  final CustomerService customerService;
   final Function(Customer) onSelectCustomer;
+  final VoidCallback onRefresh;
+  final Customer? selectedCustomer;
 
   const CustomerSelectionDialog({
     super.key,
     required this.customers,
+    required this.customerService,
     required this.onSelectCustomer,
+    required this.onRefresh,
+    this.selectedCustomer,
   });
 
   @override
@@ -110,29 +354,61 @@ class _CustomerSelectionDialogState extends State<CustomerSelectionDialog> {
   final TextEditingController _searchController = TextEditingController();
   List<Customer> _filteredCustomers = [];
   Customer? _selectedCustomer;
+  bool _isSearching = false;
 
   @override
   void initState() {
     super.initState();
     _filteredCustomers = widget.customers;
-    _searchController.addListener(_filterCustomers);
+    _selectedCustomer = widget.selectedCustomer;
+    _searchController.addListener(_onSearchChanged);
   }
 
   @override
   void dispose() {
-    _searchController.removeListener(_filterCustomers);
+    _searchController.removeListener(_onSearchChanged);
     _searchController.dispose();
     super.dispose();
   }
 
-  void _filterCustomers() {
-    final query = _searchController.text.toLowerCase();
+  void _onSearchChanged() {
+    if (_searchController.text.trim().isEmpty) {
+      setState(() {
+        _filteredCustomers = widget.customers;
+        _isSearching = false;
+      });
+      return;
+    }
+
+    _performSearch();
+  }
+
+  Future<void> _performSearch() async {
+    final query = _searchController.text.trim();
+    if (query.isEmpty) return;
+
     setState(() {
-      _filteredCustomers = widget.customers.where((customer) {
-        return customer.name.toLowerCase().contains(query) ||
-            customer.email.toLowerCase().contains(query);
-      }).toList();
+      _isSearching = true;
     });
+
+    try {
+      final documents = await widget.customerService.searchCustomersByName(query);
+      setState(() {
+        _filteredCustomers = documents.map((doc) => Customer.fromDocument(doc)).toList();
+        _isSearching = false;
+      });
+    } catch (e) {
+      final localFiltered = widget.customers.where((customer) {
+        return customer.name.toLowerCase().contains(query.toLowerCase()) ||
+            customer.phone.toLowerCase().contains(query.toLowerCase()) ||
+            customer.address.toLowerCase().contains(query.toLowerCase());
+      }).toList();
+      
+      setState(() {
+        _filteredCustomers = localFiltered;
+        _isSearching = false;
+      });
+    }
   }
 
   @override
@@ -148,20 +424,44 @@ class _CustomerSelectionDialogState extends State<CustomerSelectionDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Select Customer',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Select Customer',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                IconButton(
+                  onPressed: () {
+                    widget.onRefresh();
+                    setState(() {
+                      _filteredCustomers = widget.customers;
+                      _searchController.clear();
+                    });
+                  },
+                  icon: const Icon(Icons.refresh),
+                  tooltip: 'Refresh customers',
+                ),
+              ],
             ),
             const SizedBox(height: 16),
-            // Search Bar
             TextField(
               controller: _searchController,
               decoration: InputDecoration(
-                hintText: 'Search customers...',
-                prefixIcon: const Icon(Icons.search),
+                hintText: 'Search by name, phone, or address...',
+                prefixIcon: _isSearching 
+                    ? const Padding(
+                        padding: EdgeInsets.all(12.0),
+                        child: SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      )
+                    : const Icon(Icons.search),
                 filled: true,
                 fillColor: Colors.grey.shade100,
                 border: OutlineInputBorder(
@@ -172,16 +472,34 @@ class _CustomerSelectionDialogState extends State<CustomerSelectionDialog> {
               ),
             ),
             const SizedBox(height: 16),
-            // Customer List
             Container(
               constraints: BoxConstraints(
                 maxHeight: MediaQuery.of(context).size.height * 0.4,
               ),
               child: _filteredCustomers.isEmpty
-                  ? const Center(
+                  ? Center(
                       child: Padding(
-                        padding: EdgeInsets.all(16.0),
-                        child: Text('No customers found'),
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.person_search,
+                              size: 48,
+                              color: Colors.grey.shade400,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              _searchController.text.isEmpty 
+                                  ? 'No customers found' 
+                                  : 'No customers match your search',
+                              style: TextStyle(
+                                color: Colors.grey.shade600,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     )
                   : ListView.builder(
@@ -202,7 +520,6 @@ class _CustomerSelectionDialogState extends State<CustomerSelectionDialog> {
                     ),
             ),
             const SizedBox(height: 16),
-            // Done Button
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
@@ -262,7 +579,19 @@ class CustomerTile extends StatelessWidget {
           fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
         ),
       ),
-      subtitle: Text(customer.email),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(customer.phone),
+          Text(
+            customer.address,
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey.shade600,
+            ),
+          ),
+        ],
+      ),
       trailing: isSelected ? const Icon(Icons.check_circle, color: Colors.green) : null,
       tileColor: isSelected ? Colors.grey.shade100 : null,
       shape: RoundedRectangleBorder(

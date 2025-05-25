@@ -1,14 +1,27 @@
 import 'package:flutter/material.dart';
 
-class OrderDetailsForm extends StatelessWidget {
-  const OrderDetailsForm({super.key});
+class OrderDetailsForm extends StatefulWidget {
+  final Function(Map<String, dynamic>) onOrderChanged;
+
+  const OrderDetailsForm({
+    super.key,
+    required this.onOrderChanged,
+  });
+
+  @override
+  State<OrderDetailsForm> createState() => _OrderDetailsFormState();
+}
+
+class _OrderDetailsFormState extends State<OrderDetailsForm> {
+  String? _selectedStatus;
+  String _additionalNote = '';
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E2026),
+        color: const Color.fromARGB(255, 22, 23, 26),
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
@@ -32,7 +45,7 @@ class OrderDetailsForm extends StatelessWidget {
                 ),
                 child: const Icon(
                   Icons.shopping_bag_outlined,
-                  color: Color(0xFF61DAFB),
+                  color: Color.fromARGB(255, 49, 121, 65),
                   size: 20,
                 ),
               ),
@@ -76,11 +89,6 @@ class OrderDetailsForm extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           _buildNoteField(),
-          
-          const SizedBox(height: 24),
-          
-          // Button
-          _buildSubmitButton(),
         ],
       ),
     );
@@ -103,13 +111,19 @@ class OrderDetailsForm extends StatelessWidget {
         icon: const Icon(Icons.keyboard_arrow_down, color: Color(0xFF61DAFB)),
         style: const TextStyle(color: Colors.white, fontSize: 15),
         hint: const Text('Select status', style: TextStyle(color: Colors.white70)),
+        value: _selectedStatus,
         items: ['Processing', 'Shipped', 'Delivered', 'Cancelled']
             .map((status) => DropdownMenuItem<String>(
                   value: status,
                   child: Text(status),
                 ))
             .toList(),
-        onChanged: (value) {},
+        onChanged: (value) {
+          setState(() {
+            _selectedStatus = value;
+          });
+          _notifyParent();
+        },
       ),
     );
   }
@@ -130,47 +144,22 @@ class OrderDetailsForm extends StatelessWidget {
           contentPadding: const EdgeInsets.all(16),
           border: InputBorder.none,
         ),
+        onChanged: (value) {
+          _additionalNote = value;
+          _notifyParent();
+        },
       ),
     );
   }
 
-  Widget _buildSubmitButton() {
-    return Container(
-      width: double.infinity,
-      height: 52,
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF61DAFB), Color(0xFF2979FF)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF61DAFB).withOpacity(0.3),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: ElevatedButton(
-        onPressed: () {},
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.transparent,
-          shadowColor: Colors.transparent,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
-        child: const Text(
-          'Update Order',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ),
-    );
+  void _notifyParent() {
+    final orderData = {
+      'status': _selectedStatus,
+      'additionalNote': _additionalNote,
+      'isComplete': _selectedStatus != null && _additionalNote.isNotEmpty,
+      'timestamp': DateTime.now().toIso8601String(),
+    };
+    
+    widget.onOrderChanged(orderData);
   }
 }

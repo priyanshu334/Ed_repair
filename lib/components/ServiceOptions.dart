@@ -1,12 +1,58 @@
+import 'package:ed_repair/pages/ManageEnginner.dart';
+import 'package:ed_repair/services/ServiceCenterService.dart';
 import 'package:flutter/material.dart';
 
+// Data models to structure the returned data
+class EngineerBookingData {
+  final String engineerId;
+  final String engineerName;
+  final DateTime date;
+  final TimeOfDay time;
+
+  EngineerBookingData({
+    required this.engineerId,
+    required this.engineerName,
+    required this.date,
+    required this.time,
+  });
+}
+
+class ServiceCenterBookingData {
+  final String centerId;
+  final String centerName;
+  final DateTime date;
+  final TimeOfDay time;
+
+  ServiceCenterBookingData({
+    required this.centerId,
+    required this.centerName,
+    required this.date,
+    required this.time,
+  });
+}
+
 class ServiceOptions extends StatelessWidget {
-  void _showEngineerDialog(BuildContext context) {
-    String? selectedEngineer;
+  final EngineerService _engineerService = EngineerService();
+  final ServiceCenterService _serviceCenterService = ServiceCenterService();
+  
+  // Changed callbacks to required and non-nullable
+  final Function(EngineerBookingData) onEngineerBooked;
+  final Function(ServiceCenterBookingData) onServiceCenterBooked;
+
+  ServiceOptions({
+    Key? key,
+    required this.onEngineerBooked,
+    required this.onServiceCenterBooked,
+  }) : super(key: key);
+
+  void _showEngineerDialog(BuildContext context) async {
+    final engineers = await _engineerService.getAllEngineers();
+    String? selectedEngineerId;
+    String? selectedEngineerName;
     DateTime? selectedDate;
     TimeOfDay? selectedTime;
 
-    showDialog(
+    await showDialog(
       context: context,
       builder: (context) {
         return StatefulBuilder(builder: (context, setState) {
@@ -34,42 +80,33 @@ class ServiceOptions extends StatelessWidget {
                     child: DropdownButtonHideUnderline(
                       child: DropdownButton<String>(
                         isExpanded: true,
-                        value: selectedEngineer,
+                        value: selectedEngineerId,
                         hint: const Text("Select Engineer"),
                         onChanged: (value) {
                           setState(() {
-                            selectedEngineer = value;
+                            selectedEngineerId = value;
+                            selectedEngineerName = engineers.firstWhere(
+                              (e) => e.$id == value).data['name'];
                           });
                         },
-                        items: ['Engineer A', 'Engineer B', 'Engineer C']
-                            .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-                            .toList(),
+                        items: engineers.map((engineer) => DropdownMenuItem(
+                          value: engineer.$id,
+                          child: Text(engineer.data['name']),
+                        )).toList(),
                       ),
                     ),
                   ),
                   const SizedBox(height: 16),
                   InkWell(
                     onTap: () async {
-                      DateTime? date = await showDatePicker(
+                      final date = await showDatePicker(
                         context: context,
                         initialDate: DateTime.now(),
-                        firstDate: DateTime(2020),
-                        lastDate: DateTime(2030),
-                        builder: (context, child) {
-                          return Theme(
-                            data: Theme.of(context).copyWith(
-                              colorScheme: ColorScheme.light(
-                                primary: Theme.of(context).primaryColor,
-                              ),
-                            ),
-                            child: child!,
-                          );
-                        },
+                        firstDate: DateTime.now(),
+                        lastDate: DateTime.now().add(const Duration(days: 365)),
                       );
                       if (date != null) {
-                        setState(() {
-                          selectedDate = date;
-                        });
+                        setState(() => selectedDate = date);
                       }
                     },
                     child: Container(
@@ -85,7 +122,7 @@ class ServiceOptions extends StatelessWidget {
                           Text(
                             selectedDate == null
                                 ? 'Select Date'
-                                : selectedDate.toString().split(' ')[0],
+                                : "${selectedDate!.day}/${selectedDate!.month}/${selectedDate!.year}",
                           ),
                           const Spacer(),
                           const Icon(Icons.arrow_drop_down, color: Colors.grey),
@@ -96,24 +133,12 @@ class ServiceOptions extends StatelessWidget {
                   const SizedBox(height: 16),
                   InkWell(
                     onTap: () async {
-                      TimeOfDay? time = await showTimePicker(
+                      final time = await showTimePicker(
                         context: context,
                         initialTime: TimeOfDay.now(),
-                        builder: (context, child) {
-                          return Theme(
-                            data: Theme.of(context).copyWith(
-                              colorScheme: ColorScheme.light(
-                                primary: Theme.of(context).primaryColor,
-                              ),
-                            ),
-                            child: child!,
-                          );
-                        },
                       );
                       if (time != null) {
-                        setState(() {
-                          selectedTime = time;
-                        });
+                        setState(() => selectedTime = time);
                       }
                     },
                     child: Container(
@@ -153,8 +178,22 @@ class ServiceOptions extends StatelessWidget {
                 ),
                 child: const Text('CONFIRM'),
                 onPressed: () {
+                  if (selectedEngineerId == null || selectedDate == null || selectedTime == null) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Please select all fields')));
+                    return;
+                  }
+                  
+                  final bookingData = EngineerBookingData(
+                    engineerId: selectedEngineerId!,
+                    engineerName: selectedEngineerName!,
+                    date: selectedDate!,
+                    time: selectedTime!,
+                  );
+                  
+                  onEngineerBooked(bookingData);
                   Navigator.pop(context);
-                  // Handle the selected values here
+                  _showSuccessDialog(context, 'Engineer booked successfully!');
                 },
               ),
             ],
@@ -164,12 +203,14 @@ class ServiceOptions extends StatelessWidget {
     );
   }
 
-  void _showServiceCenterDialog(BuildContext context) {
-    String? selectedCenter;
+  void _showServiceCenterDialog(BuildContext context) async {
+    final serviceCenters = await _serviceCenterService.getAllServiceCenters();
+    String? selectedCenterId;
+    String? selectedCenterName;
     DateTime? selectedDate;
     TimeOfDay? selectedTime;
 
-    showDialog(
+    await showDialog(
       context: context,
       builder: (context) {
         return StatefulBuilder(builder: (context, setState) {
@@ -197,42 +238,33 @@ class ServiceOptions extends StatelessWidget {
                     child: DropdownButtonHideUnderline(
                       child: DropdownButton<String>(
                         isExpanded: true,
-                        value: selectedCenter,
+                        value: selectedCenterId,
                         hint: const Text("Select Service Center"),
                         onChanged: (value) {
                           setState(() {
-                            selectedCenter = value;
+                            selectedCenterId = value;
+                            selectedCenterName = serviceCenters.firstWhere(
+                              (e) => e.$id == value).data['name'];
                           });
                         },
-                        items: ['Center X', 'Center Y', 'Center Z']
-                            .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-                            .toList(),
+                        items: serviceCenters.map((center) => DropdownMenuItem(
+                          value: center.$id,
+                          child: Text(center.data['name']),
+                        )).toList(),
                       ),
                     ),
                   ),
                   const SizedBox(height: 16),
                   InkWell(
                     onTap: () async {
-                      DateTime? date = await showDatePicker(
+                      final date = await showDatePicker(
                         context: context,
                         initialDate: DateTime.now(),
-                        firstDate: DateTime(2020),
-                        lastDate: DateTime(2030),
-                        builder: (context, child) {
-                          return Theme(
-                            data: Theme.of(context).copyWith(
-                              colorScheme: ColorScheme.light(
-                                primary: Theme.of(context).primaryColor,
-                              ),
-                            ),
-                            child: child!,
-                          );
-                        },
+                        firstDate: DateTime.now(),
+                        lastDate: DateTime.now().add(const Duration(days: 365)),
                       );
                       if (date != null) {
-                        setState(() {
-                          selectedDate = date;
-                        });
+                        setState(() => selectedDate = date);
                       }
                     },
                     child: Container(
@@ -248,7 +280,7 @@ class ServiceOptions extends StatelessWidget {
                           Text(
                             selectedDate == null
                                 ? 'Select Date'
-                                : selectedDate.toString().split(' ')[0],
+                                : "${selectedDate!.day}/${selectedDate!.month}/${selectedDate!.year}",
                           ),
                           const Spacer(),
                           const Icon(Icons.arrow_drop_down, color: Colors.grey),
@@ -259,24 +291,12 @@ class ServiceOptions extends StatelessWidget {
                   const SizedBox(height: 16),
                   InkWell(
                     onTap: () async {
-                      TimeOfDay? time = await showTimePicker(
+                      final time = await showTimePicker(
                         context: context,
                         initialTime: TimeOfDay.now(),
-                        builder: (context, child) {
-                          return Theme(
-                            data: Theme.of(context).copyWith(
-                              colorScheme: ColorScheme.light(
-                                primary: Theme.of(context).primaryColor,
-                              ),
-                            ),
-                            child: child!,
-                          );
-                        },
                       );
                       if (time != null) {
-                        setState(() {
-                          selectedTime = time;
-                        });
+                        setState(() => selectedTime = time);
                       }
                     },
                     child: Container(
@@ -316,14 +336,44 @@ class ServiceOptions extends StatelessWidget {
                 ),
                 child: const Text('CONFIRM'),
                 onPressed: () {
+                  if (selectedCenterId == null || selectedDate == null || selectedTime == null) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Please select all fields')));
+                    return;
+                  }
+                  
+                  final bookingData = ServiceCenterBookingData(
+                    centerId: selectedCenterId!,
+                    centerName: selectedCenterName!,
+                    date: selectedDate!,
+                    time: selectedTime!,
+                  );
+                  
+                  onServiceCenterBooked(bookingData);
                   Navigator.pop(context);
-                  // Handle the selected values here
+                  _showSuccessDialog(context, 'Service center appointment booked successfully!');
                 },
               ),
             ],
           );
         });
       },
+    );
+  }
+
+  void _showSuccessDialog(BuildContext context, String message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Success'),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
     );
   }
 

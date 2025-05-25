@@ -1,10 +1,16 @@
-import 'package:ed_repair/components/PatterLockPage.dart';
 import 'package:flutter/material.dart';
-import 'dart:io';
+import 'dart:io' as io;
 import 'package:image_picker/image_picker.dart';
+import 'package:appwrite/appwrite.dart';
+import 'package:appwrite/models.dart' as models;
 
 class DeviceKycForm extends StatefulWidget {
-  const DeviceKycForm({super.key});
+  final Function(Map<String, dynamic>) onFormChanged;
+
+  const DeviceKycForm({
+    super.key,
+    required this.onFormChanged,
+  });
 
   @override
   State<DeviceKycForm> createState() => _DeviceKycFormState();
@@ -15,18 +21,168 @@ class _DeviceKycFormState extends State<DeviceKycForm> {
   final TextEditingController lockCodeController = TextEditingController();
   
   bool isOnWarranty = false;
+  DateTime? warrantyDate;
   List<String> problemsList = [];
   List<String> additionalAccessories = [];
+  List<String> standardAccessories = ['Power Adapter', 'Mouse', 'Keyboard'];
   
   // Image files
-  File? frontImage;
-  File? backImage;
-  File? leftImage;
-  File? rightImage;
+  io.File? frontImage;
+  io.File? backImage;
+  io.File? leftImage;
+  io.File? rightImage;
+  
+  // Appwrite file IDs
+  String? frontImageId;
+  String? backImageId;
+  String? leftImageId;
+  String? rightImageId;
+  
+  // Upload states
+  bool isFrontUploading = false;
+  bool isBackUploading = false;
+  bool isLeftUploading = false;
+  bool isRightUploading = false;
   
   final ImagePicker _picker = ImagePicker();
+  
+  // Appwrite configuration
+  late Client client;
+  late Storage storage;
+  
+  // Replace these with your Appwrite configuration
+  static const String endpoint = 'https://fra.cloud.appwrite.io/v1';
+  static const String projectId = '682ed1b4000f293ec42e';
+  static const String bucketId = '68317907003109c61482';
 
-  // Function to pick image
+  @override
+  void initState() {
+    super.initState();
+    _initializeAppwrite();
+    modelController.addListener(_notifyParent);
+    lockCodeController.addListener(_notifyParent);
+  }
+
+  void _initializeAppwrite() {
+    client = Client()
+        .setEndpoint(endpoint)
+        .setProject(projectId);
+    
+    storage = Storage(client);
+  }
+
+  @override
+  void dispose() {
+    modelController.dispose();
+    lockCodeController.dispose();
+    super.dispose();
+  }
+
+  void _notifyParent() {
+    widget.onFormChanged({
+      'model': modelController.text,
+      'lockCode': lockCodeController.text,
+      'isOnWarranty': isOnWarranty,
+      'warrantyDate': warrantyDate,
+      'problemsList': problemsList,
+      'additionalAccessories': additionalAccessories,
+      'standardAccessories': standardAccessories,
+      'frontImageId': frontImageId,
+      'backImageId': backImageId,
+      'leftImageId': leftImageId,
+      'rightImageId': rightImageId,
+      'frontImagePath': frontImage?.path,
+      'backImagePath': backImage?.path,
+      'leftImagePath': leftImage?.path,
+      'rightImagePath': rightImage?.path,
+    });
+  }
+
+  Future<String?> _uploadImageToAppwrite(io.File imageFile, String imageType) async {
+    try {
+      // Generate unique file ID
+      final String fileId = '${DateTime.now().millisecondsSinceEpoch}_$imageType';
+      
+      // Create InputFile from File
+      final inputFile = InputFile.fromPath(
+        path: imageFile.path,
+        filename: '$fileId.jpg',
+      );
+      
+      // Upload file to Appwrite storage
+      final models.File uploadedFile = await storage.createFile(
+        bucketId: bucketId,
+        fileId: fileId,
+        file: inputFile,
+      );
+      
+      return uploadedFile.$id;
+    } catch (e) {
+      print('Error uploading image: $e');
+      _showSnackBar('Failed to upload image: ${e.toString()}', isError: true);
+      return null;
+    }
+  }
+
+  Future<void> _deleteImageFromAppwrite(String fileId) async {
+    try {
+      await storage.deleteFile(
+        bucketId: bucketId,
+        fileId: fileId,
+      );
+    } catch (e) {
+      print('Error deleting image: $e');
+    }
+  }
+
+  String getImageUrl(String fileId) {
+    return '$endpoint/storage/buckets/$bucketId/files/$fileId/view?project=$projectId';
+  }
+
+  void _showSnackBar(String message, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isError ? Colors.red : Colors.green,
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  Future<void> _selectWarrantyDate() async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: warrantyDate ?? DateTime.now(),
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2030),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: ColorScheme.light(
+              primary: Theme.of(context).primaryColor,
+              onPrimary: Colors.white,
+              surface: Colors.white,
+              onSurface: Colors.black,
+            ),
+            dialogBackgroundColor: Colors.white,
+          ),
+          child: child!,
+        );
+      },
+    );
+    
+    if (picked != null && picked != warrantyDate) {
+      setState(() {
+        warrantyDate = picked;
+        _notifyParent();
+      });
+    }
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+  }
+
   Future<void> _pickImage(ImageSource source, String imageType) async {
     final XFile? selectedImage = await _picker.pickImage(source: source);
     
@@ -34,23 +190,115 @@ class _DeviceKycFormState extends State<DeviceKycForm> {
       setState(() {
         switch (imageType) {
           case 'front':
-            frontImage = File(selectedImage.path);
+            frontImage = io.File(selectedImage.path);
+            isFrontUploading = true;
             break;
           case 'back':
-            backImage = File(selectedImage.path);
+            backImage = io.File(selectedImage.path);
+            isBackUploading = true;
             break;
           case 'left':
-            leftImage = File(selectedImage.path);
+            leftImage = io.File(selectedImage.path);
+            isLeftUploading = true;
             break;
           case 'right':
-            rightImage = File(selectedImage.path);
+            rightImage = io.File(selectedImage.path);
+            isRightUploading = true;
             break;
         }
       });
+
+      // Upload to Appwrite
+      final String? uploadedFileId = await _uploadImageToAppwrite(
+        io.File(selectedImage.path),
+        imageType,
+      );
+
+      setState(() {
+        switch (imageType) {
+          case 'front':
+            isFrontUploading = false;
+            if (uploadedFileId != null) {
+              // Delete old file if exists
+              if (frontImageId != null) {
+                _deleteImageFromAppwrite(frontImageId!);
+              }
+              frontImageId = uploadedFileId;
+              _showSnackBar('Front image uploaded successfully!');
+            }
+            break;
+          case 'back':
+            isBackUploading = false;
+            if (uploadedFileId != null) {
+              if (backImageId != null) {
+                _deleteImageFromAppwrite(backImageId!);
+              }
+              backImageId = uploadedFileId;
+              _showSnackBar('Back image uploaded successfully!');
+            }
+            break;
+          case 'left':
+            isLeftUploading = false;
+            if (uploadedFileId != null) {
+              if (leftImageId != null) {
+                _deleteImageFromAppwrite(leftImageId!);
+              }
+              leftImageId = uploadedFileId;
+              _showSnackBar('Left image uploaded successfully!');
+            }
+            break;
+          case 'right':
+            isRightUploading = false;
+            if (uploadedFileId != null) {
+              if (rightImageId != null) {
+                _deleteImageFromAppwrite(rightImageId!);
+              }
+              rightImageId = uploadedFileId;
+              _showSnackBar('Right image uploaded successfully!');
+            }
+            break;
+        }
+        _notifyParent();
+      });
     }
   }
-  
-  // Function to show image source options
+
+  Future<void> _removeImage(String imageType) async {
+    String? fileIdToDelete;
+    
+    setState(() {
+      switch (imageType) {
+        case 'front':
+          frontImage = null;
+          fileIdToDelete = frontImageId;
+          frontImageId = null;
+          break;
+        case 'back':
+          backImage = null;
+          fileIdToDelete = backImageId;
+          backImageId = null;
+          break;
+        case 'left':
+          leftImage = null;
+          fileIdToDelete = leftImageId;
+          leftImageId = null;
+          break;
+        case 'right':
+          rightImage = null;
+          fileIdToDelete = rightImageId;
+          rightImageId = null;
+          break;
+      }
+    });
+
+    if (fileIdToDelete != null) {
+      await _deleteImageFromAppwrite(fileIdToDelete?? '');
+      _showSnackBar('Image removed successfully!');
+    }
+    
+    _notifyParent();
+  }
+
   void _showImageSourceDialog(String imageType) {
     showModalBottomSheet(
       context: context,
@@ -98,7 +346,7 @@ class _DeviceKycFormState extends State<DeviceKycForm> {
       ),
     );
   }
-  
+
   Widget _imageSourceOption({
     required IconData icon,
     required String label,
@@ -134,7 +382,6 @@ class _DeviceKycFormState extends State<DeviceKycForm> {
     );
   }
 
-  // Function to add items to lists
   void _addItemDialog(String title, List<String> itemsList, Function(List<String>) onUpdate) {
     final TextEditingController itemController = TextEditingController();
     
@@ -162,6 +409,7 @@ class _DeviceKycFormState extends State<DeviceKycForm> {
               if (itemController.text.trim().isNotEmpty) {
                 final List<String> updatedList = [...itemsList, itemController.text.trim()];
                 onUpdate(updatedList);
+                _notifyParent();
                 Navigator.pop(context);
               }
             },
@@ -177,11 +425,11 @@ class _DeviceKycFormState extends State<DeviceKycForm> {
     );
   }
   
-  // Function to remove items from lists
   void _removeItem(int index, List<String> itemsList, Function(List<String>) onUpdate) {
     final List<String> updatedList = [...itemsList];
     updatedList.removeAt(index);
     onUpdate(updatedList);
+    _notifyParent();
   }
 
   Widget _buildInput(String label, TextEditingController controller, {bool obscureText = false}) {
@@ -217,11 +465,11 @@ class _DeviceKycFormState extends State<DeviceKycForm> {
     );
   }
 
-  Widget _buildImageSlot(String label, File? image, Function() onTap) {
+  Widget _buildImageSlot(String label, io.File? image, Function() onTap, bool isUploading, String? imageId) {
     return Column(
       children: [
         GestureDetector(
-          onTap: onTap,
+          onTap: isUploading ? null : onTap,
           child: Container(
             height: 100,
             width: 80,
@@ -238,7 +486,7 @@ class _DeviceKycFormState extends State<DeviceKycForm> {
                   spreadRadius: 1,
                   blurRadius: 3,
                   offset: const Offset(0, 2),
-                ),
+                )
               ],
               image: image != null
                   ? DecorationImage(
@@ -247,24 +495,59 @@ class _DeviceKycFormState extends State<DeviceKycForm> {
                     )
                   : null,
             ),
-            child: image == null
-                ? Icon(
-                    Icons.add_a_photo_rounded,
-                    color: Theme.of(context).primaryColor.withOpacity(0.7),
-                    size: 30,
+            child: isUploading
+                ? const Center(
+                    child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : null,
+                : image == null
+                    ? Icon(
+                        Icons.add_a_photo_rounded,
+                        color: Theme.of(context).primaryColor.withOpacity(0.7),
+                        size: 30,
+                      )
+                    : Stack(
+                        children: [
+                          Positioned(
+                            top: 5,
+                            right: 5,
+                            child: GestureDetector(
+                              onTap: () => _removeImage(label.toLowerCase().replaceAll(' ', '')),
+                              child: Container(
+                                padding: const EdgeInsets.all(2),
+                                decoration: const BoxDecoration(
+                                  color: Colors.red,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.close,
+                                  color: Colors.white,
+                                  size: 12,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
           ),
         ),
         const SizedBox(height: 6),
         Text(
           label,
-          style: TextStyle(
+          style: const TextStyle(
             color: Colors.white,
             fontSize: 12,
             fontWeight: FontWeight.w500,
           ),
         ),
+        if (imageId != null)
+          const Text(
+            'Uploaded',
+            style: TextStyle(
+              color: Colors.green,
+              fontSize: 10,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
       ],
     );
   }
@@ -379,20 +662,59 @@ class _DeviceKycFormState extends State<DeviceKycForm> {
     );
   }
 
+  Widget _buildAccessoryCheckItem(String title) {
+    final isSelected = standardAccessories.contains(title);
+    
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          if (isSelected) {
+            standardAccessories.remove(title);
+          } else {
+            standardAccessories.add(title);
+          }
+          _notifyParent();
+        });
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              isSelected ? Icons.check_circle : Icons.radio_button_unchecked,
+              size: 18,
+              color: isSelected ? Theme.of(context).primaryColor : Colors.white,
+            ),
+            const SizedBox(width: 10),
+            Text(
+              title,
+              style: const TextStyle(color: Colors.white),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            const Color(0xFF1E2837),
-            const Color(0xFF2A3A4D),
+            Color.fromARGB(255, 20, 22, 24),
+            Color.fromARGB(255, 21, 23, 26),
           ],
         ),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.all(Radius.circular(20)),
       ),
       child: SingleChildScrollView(
         child: Column(
@@ -422,40 +744,6 @@ class _DeviceKycFormState extends State<DeviceKycForm> {
             _buildInput('Device Model', modelController),
             _buildInput('Lock Code', lockCodeController, obscureText: true),
             
-            // Pattern Lock Button
-            Container(
-              margin: const EdgeInsets.symmetric(vertical: 12),
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: () {
-                  // Navigate to pattern lock page
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const PatternLockPage(),
-                    ),
-                  );
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: Theme.of(context).primaryColor,
-                  padding: const EdgeInsets.symmetric(vertical: 15),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(15),
-                  ),
-                  elevation: 2,
-                ),
-                icon: const Icon(Icons.grid_3x3),
-                label: const Text(
-                  'Set Pattern Lock',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ),
-
             // Device Images Section
             Container(
               margin: const EdgeInsets.symmetric(vertical: 15),
@@ -483,11 +771,15 @@ class _DeviceKycFormState extends State<DeviceKycForm> {
                         'Front',
                         frontImage,
                         () => _showImageSourceDialog('front'),
+                        isFrontUploading,
+                        frontImageId,
                       ),
                       _buildImageSlot(
                         'Back',
                         backImage,
                         () => _showImageSourceDialog('back'),
+                        isBackUploading,
+                        backImageId,
                       ),
                     ],
                   ),
@@ -499,11 +791,15 @@ class _DeviceKycFormState extends State<DeviceKycForm> {
                         'Left Side',
                         leftImage,
                         () => _showImageSourceDialog('left'),
+                        isLeftUploading,
+                        leftImageId,
                       ),
                       _buildImageSlot(
                         'Right Side',
                         rightImage,
                         () => _showImageSourceDialog('right'),
+                        isRightUploading,
+                        rightImageId,
                       ),
                     ],
                   ),
@@ -560,76 +856,94 @@ class _DeviceKycFormState extends State<DeviceKycForm> {
               ),
             ),
 
-            // Warranty Checkbox
+            // Warranty Section
             Container(
               margin: const EdgeInsets.symmetric(vertical: 10),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 15),
               decoration: BoxDecoration(
                 color: Colors.white.withOpacity(0.08),
                 borderRadius: BorderRadius.circular(15),
               ),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Checkbox(
-                    value: isOnWarranty,
-                    onChanged: (value) {
-                      setState(() {
-                        isOnWarranty = value!;
-                      });
-                    },
-                    fillColor: MaterialStateProperty.resolveWith<Color>(
-                      (Set<MaterialState> states) {
-                        if (states.contains(MaterialState.selected)) {
-                          return Theme.of(context).primaryColor;
-                        }
-                        return Colors.transparent;
-                      },
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    side: BorderSide(color: Colors.white.withOpacity(0.7)),
+                  Row(
+                    children: [
+                      Checkbox(
+                        value: isOnWarranty,
+                        onChanged: (value) {
+                          setState(() {
+                            isOnWarranty = value!;
+                            if (!isOnWarranty) {
+                              warrantyDate = null;
+                            }
+                            _notifyParent();
+                          });
+                        },
+                        fillColor: MaterialStateProperty.resolveWith<Color>(
+                          (Set<MaterialState> states) {
+                            if (states.contains(MaterialState.selected)) {
+                              return Theme.of(context).primaryColor;
+                            }
+                            return Colors.transparent;
+                          },
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        side: BorderSide(color: Colors.white.withOpacity(0.7)),
+                      ),
+                      const SizedBox(width: 10),
+                      const Text(
+                        'Device on Warranty',
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 10),
-                  const Text(
-                    'Device on Warranty',
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
-                  ),
+                  if (isOnWarranty) ...[
+                    const SizedBox(height: 15),
+                    GestureDetector(
+                      onTap: _selectWarrantyDate,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: Colors.white.withOpacity(0.3),
+                            width: 1,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.calendar_today_rounded,
+                              color: Theme.of(context).primaryColor,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 12),
+                            Text(
+                              warrantyDate != null
+                                  ? 'Warranty Expires: ${_formatDate(warrantyDate!)}'
+                                  : 'Select Warranty Expiry Date',
+                              style: TextStyle(
+                                color: warrantyDate != null ? Colors.white : Colors.white.withOpacity(0.7),
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const Spacer(),
+                            Icon(
+                              Icons.arrow_forward_ios_rounded,
+                              color: Colors.white.withOpacity(0.5),
+                              size: 16,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
-              ),
-            ),
-            
-            // Submit Button
-            const SizedBox(height: 20),
-            Container(
-              width: double.infinity,
-              height: 55,
-              margin: const EdgeInsets.only(bottom: 10),
-              child: ElevatedButton(
-                onPressed: () {
-                  // Handle form submission
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Device KYC submitted successfully!'),
-                      backgroundColor: Colors.green,
-                    ),
-                  );
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Theme.of(context).primaryColor,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(15),
-                  ),
-                  elevation: 5,
-                ),
-                child: const Text(
-                  'SUBMIT',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1,
-                  ),
-                ),
               ),
             ),
           ],
@@ -637,31 +951,4 @@ class _DeviceKycFormState extends State<DeviceKycForm> {
       ),
     );
   }
-  
-  Widget _buildAccessoryCheckItem(String title) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            Icons.check_circle,
-            size: 18,
-            color: Theme.of(context).primaryColor,
-          ),
-          const SizedBox(width: 10),
-          Text(
-            title,
-            style: const TextStyle(color: Colors.white),
-          ),
-        ],
-      ),
-    );
-  }
 }
-
-// Pattern Lock Page
