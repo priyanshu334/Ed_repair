@@ -4,10 +4,12 @@ import 'package:appwrite/models.dart';
 
 class EngineerSelectorPage extends StatefulWidget {
   final Function(Map<String, dynamic>) onSelectionChanged;
+  final Map<String, dynamic> initialSelection; // <--- ADD THIS
 
   const EngineerSelectorPage({
     super.key,
     required this.onSelectionChanged,
+    required this.initialSelection, // <--- ADD THIS
   });
 
   @override
@@ -27,6 +29,40 @@ class _EngineerSelectorPageState extends State<EngineerSelectorPage> {
   void initState() {
     super.initState();
     _fetchEngineers();
+    // --- Initialize state with initialSelection ---
+    if (widget.initialSelection.isNotEmpty) {
+      selectedEngineer = widget.initialSelection['engineer'] as String?;
+      if (widget.initialSelection['date'] != null) {
+        selectedDate = DateTime.tryParse(widget.initialSelection['date']);
+      }
+      if (widget.initialSelection['time'] != null) {
+        // Parse TimeOfDay from string (e.g., "10:30 AM")
+        try {
+          final String timeString = widget.initialSelection['time'];
+          final List<String> parts = timeString.split(' ');
+          if (parts.length == 2) {
+            final List<String> hourMinute = parts[0].split(':');
+            if (hourMinute.length == 2) {
+              int hour = int.parse(hourMinute[0]);
+              int minute = int.parse(hourMinute[1]);
+              if (parts[1] == 'PM' && hour < 12) {
+                hour += 12;
+              } else if (parts[1] == 'AM' && hour == 12) {
+                hour = 0; // Midnight
+              }
+              selectedTime = TimeOfDay(hour: hour, minute: minute);
+            }
+          }
+        } catch (e) {
+          debugPrint('Error parsing TimeOfDay: $e');
+        }
+      }
+      // Notify parent immediately after initial load if there's existing data
+      // This ensures that `_hasChanges` is correctly reflected in the parent.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _notifyParent();
+      });
+    }
   }
 
   Future<void> _fetchEngineers() async {
@@ -37,12 +73,14 @@ class _EngineerSelectorPageState extends State<EngineerSelectorPage> {
         isLoading = false;
       });
     } catch (e) {
-      setState(() {
-        isLoading = false;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to load engineers: $e')),
-      );
+      if (mounted) { // Check if the widget is still in the tree before calling setState
+        setState(() {
+          isLoading = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load engineers: $e')),
+        );
+      }
     }
   }
 
@@ -53,8 +91,27 @@ class _EngineerSelectorPageState extends State<EngineerSelectorPage> {
       'time': selectedTime?.format(context),
       'isComplete': selectedEngineer != null && selectedDate != null && selectedTime != null,
     };
-    
+
+    // Ensure we're passing non-null values for the map keys to avoid issues
+    // with `_sanitizeDataForJson` expecting the keys to exist, even if values are null.
+    // Or, allow `_sanitizeDataForJson` to handle null values gracefully.
+    // Given `_sanitizeDataForJson` just checks for `null` and copies, this is fine.
     widget.onSelectionChanged(selectionData);
+  }
+
+  // Add method to clear selection
+  void _clearSelection() {
+    setState(() {
+      selectedEngineer = null;
+      selectedDate = null;
+      selectedTime = null;
+    });
+    widget.onSelectionChanged({
+      'engineer': null,
+      'date': null,
+      'time': null,
+      'isComplete': false,
+    });
   }
 
   void _openDialog() {
@@ -141,8 +198,8 @@ class _EngineerSelectorPageState extends State<EngineerSelectorPage> {
                               ? 'Select Date'
                               : '${selectedDate!.day}/${selectedDate!.month}/${selectedDate!.year}',
                           style: TextStyle(
-                            color: selectedDate == null 
-                                ? Colors.grey.shade600 
+                            color: selectedDate == null
+                                ? Colors.grey.shade600
                                 : Colors.black87,
                           ),
                         ),
@@ -184,8 +241,8 @@ class _EngineerSelectorPageState extends State<EngineerSelectorPage> {
                               ? 'Select Time'
                               : selectedTime!.format(context),
                           style: TextStyle(
-                            color: selectedTime == null 
-                                ? Colors.grey.shade600 
+                            color: selectedTime == null
+                                ? Colors.grey.shade600
                                 : Colors.black87,
                           ),
                         ),
@@ -265,13 +322,33 @@ class _EngineerSelectorPageState extends State<EngineerSelectorPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Selected Engineer',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey,
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: _clearSelection,
+                          icon: const Icon(Icons.clear, size: 20),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
                     if (selectedEngineer != null)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 8),
                         child: Row(
                           children: [
-                            Icon(Icons.engineering, 
-                                size: 20, 
+                            Icon(Icons.engineering,
+                                size: 20,
                                 color: Theme.of(context).primaryColor),
                             const SizedBox(width: 8),
                             Text(
@@ -289,8 +366,8 @@ class _EngineerSelectorPageState extends State<EngineerSelectorPage> {
                         padding: const EdgeInsets.only(bottom: 8),
                         child: Row(
                           children: [
-                            Icon(Icons.calendar_today, 
-                                size: 20, 
+                            Icon(Icons.calendar_today,
+                                size: 20,
                                 color: Theme.of(context).primaryColor),
                             const SizedBox(width: 8),
                             Text(
@@ -306,8 +383,8 @@ class _EngineerSelectorPageState extends State<EngineerSelectorPage> {
                     if (selectedTime != null)
                       Row(
                         children: [
-                          Icon(Icons.access_time, 
-                              size: 20, 
+                          Icon(Icons.access_time,
+                              size: 20,
                               color: Theme.of(context).primaryColor),
                           const SizedBox(width: 8),
                           Text(
@@ -324,17 +401,40 @@ class _EngineerSelectorPageState extends State<EngineerSelectorPage> {
               ),
             ),
           const SizedBox(height: 16),
-          IconButton(
-            onPressed: _openDialog,
-            icon: const Icon(Icons.engineering),
-            iconSize: 32,
-            style: IconButton.styleFrom(
-              backgroundColor: Theme.of(context).primaryColor,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.all(16),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+          // Replace IconButton with circular icon matching ServiceCenterSelectorPage
+          GestureDetector(
+            onTap: _openDialog,
+            child: Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: Theme.of(context).primaryColor,
+                borderRadius: BorderRadius.circular(40),
+                boxShadow: [
+                  BoxShadow(
+                    color: Theme.of(context).primaryColor.withOpacity(0.3),
+                    spreadRadius: 2,
+                    blurRadius: 8,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
               ),
+              child: const Icon(
+                Icons.engineering,
+                color: Colors.white,
+                size: 40,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            selectedEngineer != null 
+                ? 'Change Engineer' 
+                : 'Select Engineer',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: Theme.of(context).primaryColor,
             ),
           ),
         ],

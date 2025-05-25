@@ -1,3 +1,4 @@
+import 'package:ed_repair/components/BottomActionBar.dart';
 import 'package:ed_repair/services/OrderService.dart';
 import 'package:flutter/material.dart';
 import 'package:appwrite/models.dart';
@@ -72,7 +73,24 @@ class _ViewPageState extends State<ViewPage> {
         ],
       ),
       body: _buildBody(),
+      bottomNavigationBar: _orderData != null ? _buildBottomActionBar() : null,
     );
+  }
+
+  Widget _buildBottomActionBar() {
+    final customer = _orderData!.data['customer'] as Map<String, dynamic>? ?? {};
+    final phoneNumber = customer['phone']?.toString();
+    
+    return BottomActionBar(
+      phoneNumber: phoneNumber,
+      orderId: widget.orderId,
+    );
+  }
+
+  void _customPrintHandler() {
+    // Custom print logic if needed
+    print("Custom print handler for order: ${widget.orderId}");
+    // Add any additional print logic here
   }
 
   Widget _buildBody() {
@@ -148,281 +166,269 @@ class _ViewPageState extends State<ViewPage> {
     final estimate = _orderData!.data['estimate'] as Map<String, dynamic>? ?? {};
     final device = _orderData!.data['device'] as Map<String, dynamic>? ?? {};
     final orderDetails = _orderData!.data['orderDetails'] as Map<String, dynamic>? ?? {};
-    final status = _orderData!.data['status'] as String? ?? 'Unknown';
+    final engineer = _orderData!.data['engineer'] as Map<String, dynamic>? ?? {};
+    final serviceCenter = _orderData!.data['serviceCenter'] as Map<String, dynamic>? ?? {};
+    final status = _orderData!.data['status'] as String? ?? orderDetails['status'] as String? ?? 'Unknown';
 
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          // Selected Customer
+          _infoCard(
+            title: "Selected Customer",
+            icon: Icons.person_outline,
+            children: [
+              _InfoRow(
+                label: "Name", 
+                value: customer['name']?.toString() ?? 'N/A'
+              ),
+              _InfoRow(
+                label: "Phone", 
+                value: customer['phone']?.toString() ?? 'N/A'
+              ),
+              _InfoRow(
+                label: "Address", 
+                value: customer['address']?.toString() ?? 'N/A'
+              ),
+            ],
+          ),
+
+          // Service Center & Engineer
+          _infoCard(
+            title: "Service Details",
+            icon: Icons.engineering_outlined,
+            children: [
+              _InfoRow(
+                label: "Service Center", 
+                value: serviceCenter['serviceCenter']?.toString() ?? 'N/A'
+              ),
+              _InfoRow(
+                label: "Engineer", 
+                value: engineer['engineer']?.toString() ?? 'N/A'
+              ),
+              _InfoRow(
+                label: "Service Date", 
+                value: _formatDate(engineer['date']?.toString())
+              ),
+              _InfoRow(
+                label: "Service Time", 
+                value: engineer['time']?.toString() ?? 'N/A'
+              ),
+            ],
+          ),
+
+          // Estimate Details
+          _infoCard(
+            title: "Estimate Details",
+            icon: Icons.receipt_long_outlined,
+            children: [
+              _InfoRow(
+                label: "Total Amount", 
+                value: "₹${estimate['amount']?.toString() ?? 'N/A'}"
+              ),
+              _InfoRow(
+                label: "Advanced Paid", 
+                value: "₹${estimate['advancedPaid']?.toString() ?? 'N/A'}"
+              ),
+              _InfoRow(
+                label: "Balance", 
+                value: "₹${estimate['balance']?.toString() ?? 'N/A'}"
+              ),
+              _InfoRow(
+                label: "Date", 
+                value: _formatDate(estimate['date']?.toString())
+              ),
+              _InfoRow(
+                label: "Time", 
+                value: estimate['time']?.toString() ?? 'N/A'
+              ),
+              if (estimate['description'] != null)
+                _InfoRow(
+                  label: "Description", 
+                  value: estimate['description']?.toString() ?? 'N/A'
+                ),
+            ],
+          ),
+
+          // Device KYC
+          _infoCard(
+            title: "Device KYC",
+            icon: Icons.smartphone_outlined,
+            children: [
+              _InfoRow(
+                label: "Device Model", 
+                value: device['model']?.toString() ?? 'N/A'
+              ),
+              _InfoRow(
+                label: "Lock Code", 
+                value: device['lockCode']?.toString() ?? 'N/A'
+              ),
+              _InfoRow(
+                label: "Warranty Status", 
+                value: (device['isOnWarranty'] == true) ? 'Under Warranty' : 'No Warranty'
+              ),
+              if (device['warrantyDate'] != null)
+                _InfoRow(
+                  label: "Warranty Date", 
+                  value: _formatDate(device['warrantyDate']?.toString())
+                ),
+              
+              const SizedBox(height: 16),
+              
+              // Images Section
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF3A3A3A),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      "Device Images",
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontWeight: FontWeight.w500,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        _buildImagePlaceholder("Front", device['frontImage']),
+                        _buildImagePlaceholder("Back", device['backImage']),
+                        _buildImagePlaceholder("Left", device['leftImage']),
+                        _buildImagePlaceholder("Right", device['rightImage']),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              
+              const SizedBox(height: 16),
+              
+              // Problems List
+              if (device['problemsList'] != null)
+                _listSection(
+                  title: "Problems List",
+                  items: List<String>.from(device['problemsList'] as List? ?? []),
+                  color: Colors.red[400]!,
+                ),
+              
+              const SizedBox(height: 12),
+              
+              // Standard Accessories List
+              if (device['standardAccessories'] != null)
+                _listSection(
+                  title: "Standard Accessories",
+                  items: List<String>.from(device['standardAccessories'] as List? ?? []),
+                  color: Colors.blue[400]!,
+                ),
+
+              const SizedBox(height: 12),
+              
+              // Additional Accessories List
+              if (device['additionalAccessories'] != null)
+                _listSection(
+                  title: "Additional Accessories",
+                  items: List<String>.from(device['additionalAccessories'] as List? ?? []),
+                  color: Colors.green[400]!,
+                ),
+            ],
+          ),
+
+          // Order Status
+          _infoCard(
+            title: "Order Status",
+            icon: Icons.assignment_outlined,
+            children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: _getStatusColor(status).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: _getStatusColor(status).withOpacity(0.3),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      _getStatusIcon(status), 
+                      color: _getStatusColor(status), 
+                      size: 20
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      "Status: ${status.toUpperCase()}",
+                      style: TextStyle(
+                        color: _getStatusColor(status),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              _InfoRow(
+                label: "Order ID", 
+                value: _orderData!.$id
+              ),
+              _InfoRow(
+                label: "Created At", 
+                value: _formatDateTime(_orderData!.data['createdAt']?.toString())
+              ),
+              _InfoRow(
+                label: "Updated At", 
+                value: _formatDateTime(_orderData!.data['updatedAt']?.toString())
+              ),
+              if (orderDetails['additionalNote'] != null)
+                _InfoRow(
+                  label: "Additional Notes", 
+                  value: orderDetails['additionalNote']?.toString() ?? 'N/A'
+                ),
+              _InfoRow(
+                label: "Order Complete", 
+                value: (orderDetails['isComplete'] == true) ? 'Yes' : 'No'
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildImagePlaceholder(String label, dynamic imageData) {
     return Column(
       children: [
-        Expanded(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                // Selected Customer
-                _infoCard(
-                  title: "Selected Customer",
-                  icon: Icons.person_outline,
-                  children: [
-                    _InfoRow(
-                      label: "Name", 
-                      value: customer['name']?.toString() ?? 'N/A'
-                    ),
-                    _InfoRow(
-                      label: "Number", 
-                      value: customer['phone']?.toString() ?? customer['number']?.toString() ?? 'N/A'
-                    ),
-                    _InfoRow(
-                      label: "Address", 
-                      value: customer['address']?.toString() ?? 'N/A'
-                    ),
-                    _InfoRow(
-                      label: "Email", 
-                      value: customer['email']?.toString() ?? 'N/A'
-                    ),
-                  ],
-                ),
-
-                // Estimate Details
-                _infoCard(
-                  title: "Estimate Details",
-                  icon: Icons.receipt_long_outlined,
-                  children: [
-                    _InfoRow(
-                      label: "Total Amount", 
-                      value: "₹${estimate['totalAmount']?.toString() ?? estimate['amount']?.toString() ?? 'N/A'}"
-                    ),
-                    _InfoRow(
-                      label: "Advanced Paid", 
-                      value: "₹${estimate['advancePaid']?.toString() ?? estimate['advance']?.toString() ?? 'N/A'}"
-                    ),
-                    _InfoRow(
-                      label: "Remaining Amount", 
-                      value: "₹${estimate['remainingAmount']?.toString() ?? 'N/A'}"
-                    ),
-                    _InfoRow(
-                      label: "Due Date", 
-                      value: estimate['dueDate']?.toString() ?? 'N/A'
-                    ),
-                    _InfoRow(
-                      label: "Due Time", 
-                      value: estimate['dueTime']?.toString() ?? 'N/A'
-                    ),
-                  ],
-                ),
-
-                // Device KYC
-                _infoCard(
-                  title: "Device KYC",
-                  icon: Icons.smartphone_outlined,
-                  children: [
-                    _InfoRow(
-                      label: "Device Model", 
-                      value: device['model']?.toString() ?? device['deviceModel']?.toString() ?? 'N/A'
-                    ),
-                    _InfoRow(
-                      label: "Brand", 
-                      value: device['brand']?.toString() ?? 'N/A'
-                    ),
-                    _InfoRow(
-                      label: "IMEI", 
-                      value: device['imei']?.toString() ?? 'N/A'
-                    ),
-                    _InfoRow(
-                      label: "Lock Code", 
-                      value: device['lockCode']?.toString() ?? device['passcode']?.toString() ?? 'N/A'
-                    ),
-                    _InfoRow(
-                      label: "Pattern Lock", 
-                      value: device['patternLock']?.toString() ?? device['pattern']?.toString() ?? 'N/A'
-                    ),
-                    const SizedBox(height: 16),
-                    
-                    // Images Section
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF3A3A3A),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            "Device Images",
-                            style: TextStyle(
-                              color: Colors.white70,
-                              fontWeight: FontWeight.w500,
-                              fontSize: 14,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                            children: List.generate(4, (index) {
-                              return Container(
-                                width: 60,
-                                height: 60,
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF4A4A4A),
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(
-                                    color: Colors.grey[600]!,
-                                    width: 1,
-                                  ),
-                                ),
-                                child: const Icon(
-                                  Icons.image_outlined,
-                                  color: Colors.grey,
-                                  size: 24,
-                                ),
-                              );
-                            }),
-                          ),
-                        ],
-                      ),
-                    ),
-                    
-                    const SizedBox(height: 16),
-                    
-                    // Problems List
-                    if (device['problems'] != null)
-                      _listSection(
-                        title: "Problems List",
-                        items: List<String>.from(device['problems'] as List? ?? []),
-                        color: Colors.red[400]!,
-                      ),
-                    
-                    const SizedBox(height: 12),
-                    
-                    // Accessories List
-                    if (device['accessories'] != null)
-                      _listSection(
-                        title: "Accessories List",
-                        items: List<String>.from(device['accessories'] as List? ?? []),
-                        color: Colors.blue[400]!,
-                      ),
-                    
-                    const SizedBox(height: 16),
-                    
-                    if (device['warranty'] != null)
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF2A4A2A),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.verified_user_outlined, color: Colors.green, size: 20),
-                            const SizedBox(width: 8),
-                            Text(
-                              "Device Warranty - ${device['warranty']?.toString() ?? 'N/A'}",
-                              style: const TextStyle(
-                                color: Colors.green,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                  ],
-                ),
-
-                // Order Status
-                _infoCard(
-                  title: "Order Status",
-                  icon: Icons.assignment_outlined,
-                  children: [
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: _getStatusColor(status).withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: _getStatusColor(status).withOpacity(0.3),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            _getStatusIcon(status), 
-                            color: _getStatusColor(status), 
-                            size: 20
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            "Status: ${status.toUpperCase()}",
-                            style: TextStyle(
-                              color: _getStatusColor(status),
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    _InfoRow(
-                      label: "Order ID", 
-                      value: _orderData!.$id
-                    ),
-                    _InfoRow(
-                      label: "Created At", 
-                      value: _formatDateTime(_orderData!.data['createdAt']?.toString())
-                    ),
-                    _InfoRow(
-                      label: "Updated At", 
-                      value: _formatDateTime(_orderData!.data['updatedAt']?.toString())
-                    ),
-                  ],
-                ),
-              ],
+        Container(
+          width: 60,
+          height: 60,
+          decoration: BoxDecoration(
+            color: const Color(0xFF4A4A4A),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: Colors.grey[600]!,
+              width: 1,
             ),
           ),
-        ),
-        
-        // Bottom Action Bar
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: const BoxDecoration(
-            color: Color(0xFF2D2D2D),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black26,
-                blurRadius: 10,
-                offset: Offset(0, -2),
-              ),
-            ],
+          child: Icon(
+            imageData != null ? Icons.image : Icons.image_outlined,
+            color: imageData != null ? Colors.white70 : Colors.grey,
+            size: 24,
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              _actionButton(
-                icon: Icons.phone,
-                label: "Call",
-                color: Colors.green,
-                onTap: () => _makeCall(customer['phone']?.toString() ?? customer['number']?.toString()),
-              ),
-              _actionButton(
-                icon: Icons.chat,
-                label: "WhatsApp",
-                color: const Color(0xFF25D366),
-                onTap: () => _openWhatsApp(customer['phone']?.toString() ?? customer['number']?.toString()),
-              ),
-              _actionButton(
-                icon: Icons.message,
-                label: "Message",
-                color: Colors.blue,
-                onTap: () => _sendMessage(customer['phone']?.toString() ?? customer['number']?.toString()),
-              ),
-              _actionButton(
-                icon: Icons.print,
-                label: "Print",
-                color: Colors.orange,
-                onTap: () => _printOrder(),
-              ),
-            ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white70,
+            fontSize: 10,
           ),
         ),
       ],
@@ -432,6 +438,7 @@ class _ViewPageState extends State<ViewPage> {
   Color _getStatusColor(String status) {
     switch (status.toLowerCase()) {
       case 'completed':
+      case 'delivered':
         return Colors.green;
       case 'in_progress':
       case 'in progress':
@@ -449,6 +456,7 @@ class _ViewPageState extends State<ViewPage> {
   IconData _getStatusIcon(String status) {
     switch (status.toLowerCase()) {
       case 'completed':
+      case 'delivered':
         return Icons.check_circle_outline;
       case 'in_progress':
       case 'in progress':
@@ -473,33 +481,14 @@ class _ViewPageState extends State<ViewPage> {
     }
   }
 
-  void _makeCall(String? phoneNumber) {
-    if (phoneNumber != null && phoneNumber.isNotEmpty) {
-      // Implement phone call functionality
-      // You can use url_launcher package: launch("tel:$phoneNumber")
-      print("Calling: $phoneNumber");
+  String _formatDate(String? dateString) {
+    if (dateString == null) return 'N/A';
+    try {
+      final date = DateTime.parse(dateString);
+      return "${date.day}/${date.month}/${date.year}";
+    } catch (e) {
+      return dateString;
     }
-  }
-
-  void _openWhatsApp(String? phoneNumber) {
-    if (phoneNumber != null && phoneNumber.isNotEmpty) {
-      // Implement WhatsApp functionality
-      // You can use url_launcher package: launch("https://wa.me/$phoneNumber")
-      print("Opening WhatsApp for: $phoneNumber");
-    }
-  }
-
-  void _sendMessage(String? phoneNumber) {
-    if (phoneNumber != null && phoneNumber.isNotEmpty) {
-      // Implement SMS functionality
-      // You can use url_launcher package: launch("sms:$phoneNumber")
-      print("Sending message to: $phoneNumber");
-    }
-  }
-
-  void _printOrder() {
-    // Implement print functionality
-    print("Printing order: ${widget.orderId}");
   }
 
   Widget _infoCard({
@@ -576,40 +565,6 @@ class _ViewPageState extends State<ViewPage> {
           const SizedBox(height: 8),
           BulletList(items: items, color: color),
         ],
-      ),
-    );
-  }
-
-  Widget _actionButton({
-    required IconData icon,
-    required String label,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: color.withOpacity(0.3)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: color, size: 24),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(
-                color: color,
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

@@ -24,6 +24,16 @@ class Customer {
     );
   }
 
+  // Create customer from Map<String, dynamic> (for initial data)
+  factory Customer.fromMap(Map<String, dynamic> map, {String? id}) {
+    return Customer(
+      id: id ?? map['id'] ?? '',
+      name: map['name'] ?? '',
+      phone: map['phone'] ?? '',
+      address: map['address'] ?? '',
+    );
+  }
+
   // Create a copy with updated fields
   Customer copyWith({
     String? id,
@@ -39,8 +49,18 @@ class Customer {
     );
   }
 
-  // Convert to map with basic info only
-  Map<String, String> toBasicInfo() {
+  // Convert to Map<String, dynamic> (changed from Map<String, String>)
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'name': name,
+      'phone': phone,
+      'address': address,
+    };
+  }
+
+  // Keep the basic info method but return dynamic map
+  Map<String, dynamic> toBasicInfo() {
     return {
       'name': name,
       'phone': phone,
@@ -50,8 +70,8 @@ class Customer {
 }
 
 class SelectCustomerBox extends StatefulWidget {
-  final Function(Map<String, String>?) onCustomerChanged; // Now passes basic info map or null
-  final Customer? initialCustomer;
+  final Function(Map<String, dynamic>?) onCustomerChanged; // Changed to Map<String, dynamic>
+  final Map<String, dynamic>? initialCustomer; // Changed from Customer? to Map<String, dynamic>?
 
   const SelectCustomerBox({
     super.key, 
@@ -72,7 +92,10 @@ class _SelectCustomerBoxState extends State<SelectCustomerBox> {
   @override
   void initState() {
     super.initState();
-    _selectedCustomer = widget.initialCustomer;
+    // Convert initial customer data to Customer object if provided
+    if (widget.initialCustomer != null && widget.initialCustomer!.isNotEmpty) {
+      _selectedCustomer = Customer.fromMap(widget.initialCustomer!);
+    }
     _loadCustomers();
   }
 
@@ -87,11 +110,22 @@ class _SelectCustomerBoxState extends State<SelectCustomerBox> {
         _allCustomers = documents.map((doc) => Customer.fromDocument(doc)).toList();
         _isLoading = false;
         
-        // If initial customer was provided, ensure it's in our list
-        if (widget.initialCustomer != null) {
-          final exists = _allCustomers.any((c) => c.id == widget.initialCustomer!.id);
-          if (!exists) {
-            _allCustomers.add(widget.initialCustomer!);
+        // If initial customer was provided, try to find it in our list or add it
+        if (widget.initialCustomer != null && widget.initialCustomer!.isNotEmpty) {
+          final initialName = widget.initialCustomer!['name'] ?? '';
+          final initialPhone = widget.initialCustomer!['phone'] ?? '';
+          
+          // Try to find existing customer by name and phone
+          final existingCustomer = _allCustomers.firstWhere(
+            (c) => c.name == initialName && c.phone == initialPhone,
+            orElse: () => Customer.fromMap(widget.initialCustomer!),
+          );
+          
+          _selectedCustomer = existingCustomer;
+          
+          // Add to list if not found
+          if (!_allCustomers.any((c) => c.name == initialName && c.phone == initialPhone)) {
+            _allCustomers.add(_selectedCustomer!);
           }
         }
       });
@@ -118,8 +152,8 @@ class _SelectCustomerBoxState extends State<SelectCustomerBox> {
           setState(() {
             _selectedCustomer = customer;
           });
-          // Pass only basic customer info (name, phone, address) to parent
-          widget.onCustomerChanged(customer.toBasicInfo());
+          // Pass complete customer info as Map<String, dynamic> to parent
+          widget.onCustomerChanged(customer.toMap());
         },
         onRefresh: _loadCustomers,
       ),
@@ -330,6 +364,7 @@ class _SelectCustomerBoxState extends State<SelectCustomerBox> {
   }
 }
 
+// The rest of the classes remain the same
 class CustomerSelectionDialog extends StatefulWidget {
   final List<Customer> customers;
   final CustomerService customerService;

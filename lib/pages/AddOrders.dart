@@ -253,6 +253,7 @@ class _AddOrdersPageState extends State<AddOrdersPage> {
                 _buildFormSection(
                   'Estimate Details*',
                   EstimateDetailsForm(
+                    initialData: {},
                     onFormChanged: (Map<String, dynamic> estimateData) {
                       setState(() {
                         _estimateDetails = estimateData;
@@ -275,6 +276,7 @@ class _AddOrdersPageState extends State<AddOrdersPage> {
                 _buildFormSection(
                   'Order Details',
                   OrderDetailsForm(
+                    initialData: {},
                     onOrderChanged: (Map<String, dynamic> orderData) {
                       setState(() {
                         _orderDetails = orderData;
@@ -286,6 +288,7 @@ class _AddOrdersPageState extends State<AddOrdersPage> {
                 _buildFormSection(
                   "Select Engineer*", 
                   EngineerSelectorPage(
+                    initialSelection: {},
                     onSelectionChanged: (Map<String, dynamic>? engineerData) {
                       setState(() {
                         engineerSelectionData = engineerData ?? {};

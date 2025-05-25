@@ -39,6 +39,7 @@ class _OrdersPageState extends State<OrdersPage> {
     try {
       final documents = await _orderService.getAllOrders();
       final orders = documents.map((doc) => _documentToOrderModel(doc)).toList();
+      print('Fetched ${orders.length} orders');
       
       setState(() {
         _allOrders = orders;
@@ -62,9 +63,9 @@ class _OrdersPageState extends State<OrdersPage> {
       id: doc.$id,
       customerName: data['customer']['name'] ?? 'Unknown Customer',
       status: data['status'] ?? 'Unknown',
-      dueDate: _formatDateString(data['orderDetails']['dueDate']),
-      serviceProvider: data['engineer']['name'] ?? 'Unknown Engineer',
-      serviceCenter: data['serviceCenter']['name'] ?? 'Unknown Center',
+      dueDate: _formatDateString(data['estimate']['date']),
+      serviceProvider: data['engineer']['engineer'] ?? 'Unknown Engineer',
+      serviceCenter: data['serviceCenter']['serviceCenter'] ?? 'Unknown Center',
       // Add other fields as needed
     );
   }
@@ -79,7 +80,16 @@ class _OrdersPageState extends State<OrdersPage> {
     }
   }
 
-  void _handleFiltersChanged(Map<String, dynamic> filters) {
+/*************  ✨ Windsurf Command ⭐  *************/
+  /// Updates the current filter criteria and triggers a loading state. 
+  /// After a short delay to simulate an API call, applies the filters 
+  /// to the list of all orders and updates the filtered orders list.
+  /// 
+  /// The loading state is reset once the filtering is complete.
+  ///
+  /// [filters] A map containing the filter criteria to be applied.
+
+/*******  b493b59b-27a4-4bad-b802-98686cf2e61a  *******/  void _handleFiltersChanged(Map<String, dynamic> filters) {
     setState(() {
       _currentFilters = filters;
       _isLoading = true;
@@ -169,7 +179,7 @@ class _OrdersPageState extends State<OrdersPage> {
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => EditOrderPage(order: order),
+          builder: (context) => EditOrderPage(orderId: order.id),
         ),
       ).then((updatedOrder) {
         if (updatedOrder != null && updatedOrder is OrderModel) {

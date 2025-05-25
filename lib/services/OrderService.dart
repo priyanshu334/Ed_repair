@@ -107,7 +107,7 @@ class OrderService {
     );
   }
 
-  // ✅ Update entire order
+  // ✅ Update entire order - FIXED the typo here
   Future<Document> updateFullOrder({
     required String orderId,
     Map<String, dynamic>? customers,
@@ -125,7 +125,7 @@ class OrderService {
       collectionId: _collectionId,
       documentId: orderId,
       data: {
-        'customer': customers ?? currentOrder.data['customers'],
+        'customer': customers ?? currentOrder.data['customer'], // Fixed: was 'customers'
         'estimate': estimate ?? currentOrder.data['estimate'],
         'device': device ?? currentOrder.data['device'],
         'orderDetails': orderDetails ?? currentOrder.data['orderDetails'],
@@ -196,6 +196,55 @@ class OrderService {
     final deletedOrders = await getDeletedOrders();
     await deleteMultipleOrders(
       deletedOrders.map((doc) => doc.$id).toList(),
+    );
+  }
+
+  // ✅ Additional helper methods for better error handling
+  Future<bool> orderExists(String orderId) async {
+    try {
+      await getOrderById(orderId);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // ✅ Get orders by status
+  Future<List<Document>> getOrdersByStatus(String status) async {
+    final result = await databases.listDocuments(
+      databaseId: _databaseId,
+      collectionId: _collectionId,
+      queries: [
+        Query.equal('status', status),
+        Query.orderDesc('createdAt'),
+      ],
+    );
+    return result.documents;
+  }
+
+  // ✅ Search orders by customer name or phone
+  Future<List<Document>> searchOrders(String searchTerm) async {
+    final result = await databases.listDocuments(
+      databaseId: _databaseId,
+      collectionId: _collectionId,
+      queries: [
+        Query.search('customer.name', searchTerm),
+        Query.orderDesc('createdAt'),
+      ],
+    );
+    return result.documents;
+  }
+
+  // ✅ Update order status only
+  Future<Document> updateOrderStatus(String orderId, String status) async {
+    return await databases.updateDocument(
+      databaseId: _databaseId,
+      collectionId: _collectionId,
+      documentId: orderId,
+      data: {
+        'status': status,
+        'updatedAt': DateTime.now().toIso8601String(),
+      },
     );
   }
 }

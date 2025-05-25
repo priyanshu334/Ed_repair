@@ -1,4 +1,10 @@
+import 'package:ed_repair/pages/ManageEnginner.dart';
+import 'package:ed_repair/services/ServiceCenterService.dart';
+import 'package:ed_repair/services/customer_service.dart';
 import 'package:flutter/material.dart';
+import 'package:appwrite/models.dart';
+// Import your services
+
 
 class OrdersFilter extends StatefulWidget {
   final Function(Map<String, dynamic>) onFiltersChanged;
@@ -16,14 +22,34 @@ class OrdersFilter extends StatefulWidget {
 
 class _OrdersFilterState extends State<OrdersFilter> {
   bool showFilters = false;
-  String selectedStatus = '';
+  List<String> selectedStatuses = []; // Changed to List for multi-select
   DateTime? selectedDueDate;
   
-  // Advanced filter controllers
-  final TextEditingController customerNameController = TextEditingController();
+  // Advanced filter controllers - now for dropdowns
   final TextEditingController dueDateController = TextEditingController();
-  final TextEditingController serviceProviderController = TextEditingController();
-  final TextEditingController serviceCenterController = TextEditingController();
+  
+  // Selected values for dropdowns
+  String? selectedCustomerId;
+  String? selectedCustomerName;
+  String? selectedEngineerId;
+  String? selectedEngineerName;
+  String? selectedServiceCenterId;
+  String? selectedServiceCenterName;
+  
+  // Data lists
+  List<Document> customers = [];
+  List<Document> engineers = [];
+  List<Document> serviceCenters = [];
+  
+  // Loading states
+  bool isLoadingCustomers = false;
+  bool isLoadingEngineers = false;
+  bool isLoadingServiceCenters = false;
+  
+  // Services
+  final CustomerService customerService = CustomerService();
+  final EngineerService engineerService = EngineerService();
+  final ServiceCenterService serviceCenterService = ServiceCenterService();
 
   // Dark theme colors
   static const Color primaryDark = Color(0xFF1F2937);
@@ -39,14 +65,22 @@ class _OrdersFilterState extends State<OrdersFilter> {
   void initState() {
     super.initState();
     _initializeFilters();
+    _loadAllData();
   }
 
   void _initializeFilters() {
     if (widget.initialFilters.isNotEmpty) {
-      selectedStatus = widget.initialFilters['status'] ?? '';
-      customerNameController.text = widget.initialFilters['customerName'] ?? '';
-      serviceProviderController.text = widget.initialFilters['serviceProvider'] ?? '';
-      serviceCenterController.text = widget.initialFilters['serviceCenter'] ?? '';
+      // Handle multi-select status
+      if (widget.initialFilters['statuses'] != null) {
+        selectedStatuses = List<String>.from(widget.initialFilters['statuses']);
+      }
+      
+      selectedCustomerId = widget.initialFilters['customerId'];
+      selectedCustomerName = widget.initialFilters['customerName'];
+      selectedEngineerId = widget.initialFilters['engineerId'];
+      selectedEngineerName = widget.initialFilters['engineerName'];
+      selectedServiceCenterId = widget.initialFilters['serviceCenterId'];
+      selectedServiceCenterName = widget.initialFilters['serviceCenterName'];
       
       if (widget.initialFilters['dueDate'] != null) {
         selectedDueDate = widget.initialFilters['dueDate'];
@@ -55,13 +89,58 @@ class _OrdersFilterState extends State<OrdersFilter> {
     }
   }
 
+  Future<void> _loadAllData() async {
+    await Future.wait([
+      _loadCustomers(),
+      _loadEngineers(),
+      _loadServiceCenters(),
+    ]);
+  }
+
+  Future<void> _loadCustomers() async {
+    setState(() => isLoadingCustomers = true);
+    try {
+      customers = await customerService.getAllCustomers();
+    } catch (e) {
+      print('Error loading customers: $e');
+    } finally {
+      setState(() => isLoadingCustomers = false);
+    }
+  }
+
+  Future<void> _loadEngineers() async {
+    setState(() => isLoadingEngineers = true);
+    try {
+      engineers = await engineerService.getAllEngineers();
+    } catch (e) {
+      print('Error loading engineers: $e');
+    } finally {
+      setState(() => isLoadingEngineers = false);
+    }
+  }
+
+  Future<void> _loadServiceCenters() async {
+    setState(() => isLoadingServiceCenters = true);
+    try {
+      serviceCenters = await serviceCenterService.getAllServiceCenters();
+    } catch (e) {
+      print('Error loading service centers: $e');
+    } finally {
+      setState(() => isLoadingServiceCenters = false);
+    }
+  }
+
   String _formatDate(DateTime date) {
     return '${date.day}/${date.month}/${date.year}';
   }
 
-  void selectStatus(String status) {
+  void toggleStatus(String status) {
     setState(() {
-      selectedStatus = status;
+      if (selectedStatuses.contains(status)) {
+        selectedStatuses.remove(status);
+      } else {
+        selectedStatuses.add(status);
+      }
     });
     _applyFilters();
   }
@@ -97,23 +176,29 @@ class _OrdersFilterState extends State<OrdersFilter> {
 
   void _applyFilters() {
     final filters = {
-      'status': selectedStatus,
-      'customerName': customerNameController.text,
+      'statuses': selectedStatuses,
+      'customerId': selectedCustomerId,
+      'customerName': selectedCustomerName,
       'dueDate': selectedDueDate,
-      'serviceProvider': serviceProviderController.text,
-      'serviceCenter': serviceCenterController.text,
+      'engineerId': selectedEngineerId,
+      'engineerName': selectedEngineerName,
+      'serviceCenterId': selectedServiceCenterId,
+      'serviceCenterName': selectedServiceCenterName,
     };
     widget.onFiltersChanged(filters);
   }
 
   void _clearFilters() {
     setState(() {
-      selectedStatus = '';
+      selectedStatuses.clear();
       selectedDueDate = null;
-      customerNameController.clear();
+      selectedCustomerId = null;
+      selectedCustomerName = null;
+      selectedEngineerId = null;
+      selectedEngineerName = null;
+      selectedServiceCenterId = null;
+      selectedServiceCenterName = null;
       dueDateController.clear();
-      serviceProviderController.clear();
-      serviceCenterController.clear();
     });
     _applyFilters();
   }
@@ -156,26 +241,17 @@ class _OrdersFilterState extends State<OrdersFilter> {
                 ),
                 const SizedBox(height: 24),
                 
-                // Customer Name Filter
-                _buildFilterTextField(
-                  controller: customerNameController,
-                  hintText: 'Search by Customer name',
-                ),
+                // Customer Dropdown
+                _buildCustomerDropdown(),
                 
                 // Due Date Filter with Date Picker
                 _buildDateFilterField(),
                 
-                // Service Provider Filter
-                _buildFilterTextField(
-                  controller: serviceProviderController,
-                  hintText: 'Search by Service Provider',
-                ),
+                // Engineer Dropdown
+                _buildEngineerDropdown(),
                 
-                // Service Center Filter
-                _buildFilterTextField(
-                  controller: serviceCenterController,
-                  hintText: 'Search by Service Center',
-                ),
+                // Service Center Dropdown
+                _buildServiceCenterDropdown(),
                 
                 const SizedBox(height: 24),
                 
@@ -216,17 +292,13 @@ class _OrdersFilterState extends State<OrdersFilter> {
     );
   }
 
-  Widget _buildFilterTextField({
-    required TextEditingController controller,
-    required String hintText,
-  }) {
+  Widget _buildCustomerDropdown() {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
-      child: TextField(
-        controller: controller,
-        style: const TextStyle(color: textPrimary),
+      child: DropdownButtonFormField<String>(
+        value: selectedCustomerId,
         decoration: InputDecoration(
-          hintText: hintText,
+          hintText: 'Select Customer',
           hintStyle: const TextStyle(color: textSecondary),
           filled: true,
           fillColor: secondaryDark,
@@ -247,6 +319,146 @@ class _OrdersFilterState extends State<OrdersFilter> {
             vertical: 16,
           ),
         ),
+        dropdownColor: secondaryDark,
+        style: const TextStyle(color: textPrimary),
+        icon: isLoadingCustomers 
+          ? const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2, color: accent),
+            )
+          : const Icon(Icons.arrow_drop_down, color: textPrimary),
+        items: customers.map((customer) {
+          return DropdownMenuItem<String>(
+            value: customer.$id,
+            child: Text(
+              customer.data['name'] ?? 'Unknown',
+              style: const TextStyle(color: textPrimary),
+            ),
+          );
+        }).toList(),
+        onChanged: isLoadingCustomers ? null : (String? value) {
+          setState(() {
+            selectedCustomerId = value;
+            selectedCustomerName = value != null 
+              ? customers.firstWhere((c) => c.$id == value).data['name']
+              : null;
+          });
+        },
+      ),
+    );
+  }
+
+  Widget _buildEngineerDropdown() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      child: DropdownButtonFormField<String>(
+        value: selectedEngineerId,
+        decoration: InputDecoration(
+          hintText: 'Select Service Provider',
+          hintStyle: const TextStyle(color: textSecondary),
+          filled: true,
+          fillColor: secondaryDark,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(25),
+            borderSide: BorderSide(color: surfaceDark),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(25),
+            borderSide: BorderSide(color: surfaceDark),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(25),
+            borderSide: const BorderSide(color: accent),
+          ),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 20,
+            vertical: 16,
+          ),
+        ),
+        dropdownColor: secondaryDark,
+        style: const TextStyle(color: textPrimary),
+        icon: isLoadingEngineers 
+          ? const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2, color: accent),
+            )
+          : const Icon(Icons.arrow_drop_down, color: textPrimary),
+        items: engineers.map((engineer) {
+          return DropdownMenuItem<String>(
+            value: engineer.$id,
+            child: Text(
+              engineer.data['name'] ?? 'Unknown',
+              style: const TextStyle(color: textPrimary),
+            ),
+          );
+        }).toList(),
+        onChanged: isLoadingEngineers ? null : (String? value) {
+          setState(() {
+            selectedEngineerId = value;
+            selectedEngineerName = value != null 
+              ? engineers.firstWhere((e) => e.$id == value).data['name']
+              : null;
+          });
+        },
+      ),
+    );
+  }
+
+  Widget _buildServiceCenterDropdown() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      child: DropdownButtonFormField<String>(
+        value: selectedServiceCenterId,
+        decoration: InputDecoration(
+          hintText: 'Select Service Center',
+          hintStyle: const TextStyle(color: textSecondary),
+          filled: true,
+          fillColor: secondaryDark,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(25),
+            borderSide: BorderSide(color: surfaceDark),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(25),
+            borderSide: BorderSide(color: surfaceDark),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(25),
+            borderSide: const BorderSide(color: accent),
+          ),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 20,
+            vertical: 16,
+          ),
+        ),
+        dropdownColor: secondaryDark,
+        style: const TextStyle(color: textPrimary),
+        icon: isLoadingServiceCenters 
+          ? const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2, color: accent),
+            )
+          : const Icon(Icons.arrow_drop_down, color: textPrimary),
+        items: serviceCenters.map((serviceCenter) {
+          return DropdownMenuItem<String>(
+            value: serviceCenter.$id,
+            child: Text(
+              serviceCenter.data['name'] ?? 'Unknown',
+              style: const TextStyle(color: textPrimary),
+            ),
+          );
+        }).toList(),
+        onChanged: isLoadingServiceCenters ? null : (String? value) {
+          setState(() {
+            selectedServiceCenterId = value;
+            selectedServiceCenterName = value != null 
+              ? serviceCenters.firstWhere((sc) => sc.$id == value).data['name']
+              : null;
+          });
+        },
       ),
     );
   }
@@ -287,12 +499,12 @@ class _OrdersFilterState extends State<OrdersFilter> {
   }
 
   Widget buildStatusButton(String label) {
-    final isSelected = selectedStatus == label;
+    final isSelected = selectedStatuses.contains(label);
     return Expanded(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4),
         child: ElevatedButton(
-          onPressed: () => selectStatus(label),
+          onPressed: () => toggleStatus(label),
           style: ElevatedButton.styleFrom(
             backgroundColor: isSelected ? accent : surfaceDark,
             foregroundColor: Colors.white,
@@ -302,11 +514,24 @@ class _OrdersFilterState extends State<OrdersFilter> {
             padding: const EdgeInsets.symmetric(vertical: 12),
             elevation: isSelected ? 3 : 1,
           ),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-            ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (isSelected) ...[
+                const Icon(Icons.check, size: 16),
+                const SizedBox(width: 4),
+              ],
+              Flexible(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                    fontSize: 13,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -350,9 +575,11 @@ class _OrdersFilterState extends State<OrdersFilter> {
                     size: 20,
                   ),
                   const SizedBox(width: 8),
-                  const Text(
-                    'Filters',
-                    style: TextStyle(
+                  Text(
+                    selectedStatuses.isNotEmpty 
+                      ? 'Filters (${selectedStatuses.length})'
+                      : 'Filters',
+                    style: const TextStyle(
                       color: textPrimary,
                       fontWeight: FontWeight.bold,
                       fontSize: 18,
@@ -392,13 +619,27 @@ class _OrdersFilterState extends State<OrdersFilter> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Filter by Status',
-                    style: TextStyle(
-                      color: textPrimary,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Filter by Status',
+                        style: TextStyle(
+                          color: textPrimary,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      if (selectedStatuses.isNotEmpty)
+                        Text(
+                          '${selectedStatuses.length} selected',
+                          style: const TextStyle(
+                            color: accent,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                    ],
                   ),
                   const SizedBox(height: 12),
                   Row(
@@ -491,10 +732,7 @@ class _OrdersFilterState extends State<OrdersFilter> {
 
   @override
   void dispose() {
-    customerNameController.dispose();
     dueDateController.dispose();
-    serviceProviderController.dispose();
-    serviceCenterController.dispose();
     super.dispose();
   }
 }
